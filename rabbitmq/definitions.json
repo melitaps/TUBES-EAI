@@ -1,0 +1,155 @@
+{
+  "rabbit_version": "3.12",
+  "users": [
+    {
+      "name": "eai_admin",
+      "password_hash": "eai_secret_2024",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [
+    { "name": "/" }
+  ],
+  "permissions": [
+    {
+      "user": "eai_admin",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "sales.exchange",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "stock.exchange",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "dlx.exchange",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "inventory.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "dlx.exchange",
+        "x-message-ttl": 60000
+      }
+    },
+    {
+      "name": "accounting.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "dlx.exchange",
+        "x-message-ttl": 60000
+      }
+    },
+    {
+      "name": "crm.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "dlx.exchange",
+        "x-message-ttl": 60000
+      }
+    },
+    {
+      "name": "stock.success.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "stock.rejection.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "dlq.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "sales.exchange",
+      "vhost": "/",
+      "destination": "inventory.queue",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {}
+    },
+    {
+      "source": "sales.exchange",
+      "vhost": "/",
+      "destination": "accounting.queue",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {}
+    },
+    {
+      "source": "sales.exchange",
+      "vhost": "/",
+      "destination": "crm.queue",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {}
+    },
+    {
+      "source": "stock.exchange",
+      "vhost": "/",
+      "destination": "stock.success.queue",
+      "destination_type": "queue",
+      "routing_key": "success",
+      "arguments": {}
+    },
+    {
+      "source": "stock.exchange",
+      "vhost": "/",
+      "destination": "stock.rejection.queue",
+      "destination_type": "queue",
+      "routing_key": "rejection",
+      "arguments": {}
+    },
+    {
+      "source": "dlx.exchange",
+      "vhost": "/",
+      "destination": "dlq.queue",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {}
+    }
+  ]
+}

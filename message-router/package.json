@@ -1,0 +1,13 @@
+{
+  "name": "message-router",
+  "version": "1.0.0",
+  "description": "Message Router Service - Content-Based Routing",
+  "main": "src/index.js",
+  "scripts": { "start": "node src/index.js" },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "morgan": "^1.10.0",
+    "uuid": "^9.0.0"
+  }
+}

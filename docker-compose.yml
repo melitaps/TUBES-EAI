@@ -1,0 +1,379 @@
+# ============================================
+# Retail Enterprise Integration Platform
+# Docker Compose Configuration
+# ============================================
+
+services:
+  # ==========================================
+  # MESSAGE BROKER
+  # ==========================================
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: eai-rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json
+    networks:
+      - eai-network
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ==========================================
+  # DATABASES
+  # ==========================================
+  pos-db:
+    image: mysql:8
+    container_name: eai-pos-db
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root_secret
+      MYSQL_DATABASE: ${POS_DB_NAME}
+      MYSQL_USER: ${POS_DB_USER}
+      MYSQL_PASSWORD: ${POS_DB_PASS}
+    volumes:
+      - pos_db_data:/var/lib/mysql
+      - ./pos-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - eai-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_secret"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  crm-db:
+    image: mysql:8
+    container_name: eai-crm-db
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root_secret
+      MYSQL_DATABASE: ${CRM_DB_NAME}
+      MYSQL_USER: ${CRM_DB_USER}
+      MYSQL_PASSWORD: ${CRM_DB_PASS}
+    volumes:
+      - crm_db_data:/var/lib/mysql
+      - ./crm-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - eai-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_secret"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  inventory-db:
+    image: postgres:15
+    container_name: eai-inventory-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${INVENTORY_DB_NAME}
+      POSTGRES_USER: ${INVENTORY_DB_USER}
+      POSTGRES_PASSWORD: ${INVENTORY_DB_PASS}
+    volumes:
+      - inventory_db_data:/var/lib/postgresql/data
+      - ./inventory-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - eai-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${INVENTORY_DB_USER} -d ${INVENTORY_DB_NAME}"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  accounting-db:
+    image: postgres:15
+    container_name: eai-accounting-db
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: ${ACCOUNTING_DB_NAME}
+      POSTGRES_USER: ${ACCOUNTING_DB_USER}
+      POSTGRES_PASSWORD: ${ACCOUNTING_DB_PASS}
+    volumes:
+      - accounting_db_data:/var/lib/postgresql/data
+      - ./accounting-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - eai-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ACCOUNTING_DB_USER} -d ${ACCOUNTING_DB_NAME}"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  ecommerce-db:
+    image: postgres:15
+    container_name: eai-ecommerce-db
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_DB: ${ECOMMERCE_DB_NAME}
+      POSTGRES_USER: ${ECOMMERCE_DB_USER}
+      POSTGRES_PASSWORD: ${ECOMMERCE_DB_PASS}
+    volumes:
+      - ecommerce_db_data:/var/lib/postgresql/data
+      - ./ecommerce-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - eai-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ECOMMERCE_DB_USER} -d ${ECOMMERCE_DB_NAME}"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ==========================================
+  # FRONTEND
+  # ==========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: eai-frontend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+    networks:
+      - eai-network
+
+  # ==========================================
+  # API GATEWAY
+  # ==========================================
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: eai-api-gateway
+    ports:
+      - "${API_GATEWAY_PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY: ${JWT_EXPIRY}
+      POS_SERVICE_URL: ${POS_SERVICE_URL}
+      INVENTORY_SERVICE_URL: ${INVENTORY_SERVICE_URL}
+      ACCOUNTING_SERVICE_URL: ${ACCOUNTING_SERVICE_URL}
+      CRM_SERVICE_URL: ${CRM_SERVICE_URL}
+      ECOMMERCE_SERVICE_URL: ${ECOMMERCE_SERVICE_URL}
+      INTEGRATION_SERVICE_URL: ${INTEGRATION_SERVICE_URL}
+      MESSAGE_TRANSLATOR_URL: ${MESSAGE_TRANSLATOR_URL}
+      MESSAGE_ROUTER_URL: ${MESSAGE_ROUTER_URL}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - eai-network
+
+  # ==========================================
+  # ENTERPRISE SERVICES
+  # ==========================================
+  pos-service:
+    build:
+      context: ./pos-service
+      dockerfile: Dockerfile
+    container_name: eai-pos-service
+    ports:
+      - "${POS_SERVICE_PORT:-3001}:3001"
+    environment:
+      PORT: 3001
+      DB_HOST: ${POS_DB_HOST}
+      DB_PORT: ${POS_DB_PORT}
+      DB_USER: ${POS_DB_USER}
+      DB_PASS: ${POS_DB_PASS}
+      DB_NAME: ${POS_DB_NAME}
+      INTEGRATION_SERVICE_URL: ${INTEGRATION_SERVICE_URL}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+    depends_on:
+      pos-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - eai-network
+
+  inventory-service:
+    build:
+      context: ./inventory-service
+      dockerfile: Dockerfile
+    container_name: eai-inventory-service
+    ports:
+      - "${INVENTORY_SERVICE_PORT:-3002}:3002"
+    environment:
+      PORT: 3002
+      DB_HOST: ${INVENTORY_DB_HOST}
+      DB_PORT: ${INVENTORY_DB_PORT}
+      DB_USER: ${INVENTORY_DB_USER}
+      DB_PASS: ${INVENTORY_DB_PASS}
+      DB_NAME: ${INVENTORY_DB_NAME}
+      INTEGRATION_SERVICE_URL: ${INTEGRATION_SERVICE_URL}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - eai-network
+
+  accounting-service:
+    build:
+      context: ./accounting-service
+      dockerfile: Dockerfile
+    container_name: eai-accounting-service
+    ports:
+      - "${ACCOUNTING_SERVICE_PORT:-3003}:3003"
+    environment:
+      PORT: 3003
+      DB_HOST: ${ACCOUNTING_DB_HOST}
+      DB_PORT: ${ACCOUNTING_DB_PORT}
+      DB_USER: ${ACCOUNTING_DB_USER}
+      DB_PASS: ${ACCOUNTING_DB_PASS}
+      DB_NAME: ${ACCOUNTING_DB_NAME}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+    depends_on:
+      accounting-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - eai-network
+
+  crm-service:
+    build:
+      context: ./crm-service
+      dockerfile: Dockerfile
+    container_name: eai-crm-service
+    ports:
+      - "${CRM_SERVICE_PORT:-3004}:3004"
+    environment:
+      PORT: 3004
+      DB_HOST: ${CRM_DB_HOST}
+      DB_PORT: ${CRM_DB_PORT}
+      DB_USER: ${CRM_DB_USER}
+      DB_PASS: ${CRM_DB_PASS}
+      DB_NAME: ${CRM_DB_NAME}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+    depends_on:
+      crm-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - eai-network
+
+  ecommerce-service:
+    build:
+      context: ./ecommerce-service
+      dockerfile: Dockerfile
+    container_name: eai-ecommerce-service
+    ports:
+      - "${ECOMMERCE_SERVICE_PORT:-3005}:3005"
+    environment:
+      PORT: 3005
+      DB_HOST: ${ECOMMERCE_DB_HOST}
+      DB_PORT: ${ECOMMERCE_DB_PORT}
+      DB_USER: ${ECOMMERCE_DB_USER}
+      DB_PASS: ${ECOMMERCE_DB_PASS}
+      DB_NAME: ${ECOMMERCE_DB_NAME}
+      INTEGRATION_SERVICE_URL: ${INTEGRATION_SERVICE_URL}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+    depends_on:
+      ecommerce-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - eai-network
+
+  # ==========================================
+  # INTEGRATION LAYER
+  # ==========================================
+  integration-service:
+    build:
+      context: ./integration-service
+      dockerfile: Dockerfile
+    container_name: eai-integration-service
+    ports:
+      - "${INTEGRATION_SERVICE_PORT:-3006}:3006"
+    environment:
+      PORT: 3006
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+      MESSAGE_TRANSLATOR_URL: ${MESSAGE_TRANSLATOR_URL}
+      MESSAGE_ROUTER_URL: ${MESSAGE_ROUTER_URL}
+      INVENTORY_SERVICE_URL: ${INVENTORY_SERVICE_URL}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - eai-network
+
+  message-translator:
+    build:
+      context: ./message-translator
+      dockerfile: Dockerfile
+    container_name: eai-message-translator
+    ports:
+      - "${MESSAGE_TRANSLATOR_PORT:-3007}:3007"
+    environment:
+      PORT: 3007
+    networks:
+      - eai-network
+
+  message-router:
+    build:
+      context: ./message-router
+      dockerfile: Dockerfile
+    container_name: eai-message-router
+    ports:
+      - "${MESSAGE_ROUTER_PORT:-3008}:3008"
+    environment:
+      PORT: 3008
+      INVENTORY_SERVICE_URL: ${INVENTORY_SERVICE_URL}
+    networks:
+      - eai-network
+
+# ==========================================
+# NETWORKS
+# ==========================================
+networks:
+  eai-network:
+    driver: bridge
+    name: eai-network
+
+# ==========================================
+# VOLUMES
+# ==========================================
+volumes:
+  pos_db_data:
+    name: eai-pos-db-data
+  inventory_db_data:
+    name: eai-inventory-db-data
+  accounting_db_data:
+    name: eai-accounting-db-data
+  crm_db_data:
+    name: eai-crm-db-data
+  ecommerce_db_data:
+    name: eai-ecommerce-db-data
+  rabbitmq_data:
+    name: eai-rabbitmq-data
